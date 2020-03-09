@@ -14,11 +14,11 @@ import {
 	IExtensionManagementService, IExtensionGalleryService, ILocalExtension, IGalleryExtension, IQueryOptions,
 	DidInstallExtensionEvent, DidUninstallExtensionEvent, InstallExtensionEvent, IExtensionIdentifier, SortBy
 } from 'vs/platform/extensionManagement/common/extensionManagement';
-import { IExtensionEnablementService, EnablementState, IExtensionManagementServerService, IExtensionManagementServer, IExtensionTipsService, ExtensionRecommendationReason } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
+import { IWorkbenchExtensionEnablementService, EnablementState, IExtensionManagementServerService, IExtensionManagementServer, IExtensionTipsService, ExtensionRecommendationReason } from 'vs/workbench/services/extensionManagement/common/extensionManagement';
 import { getGalleryExtensionId } from 'vs/platform/extensionManagement/common/extensionManagementUtil';
 import { ExtensionManagementService } from 'vs/platform/extensionManagement/node/extensionManagementService';
-import { ExtensionTipsService } from 'vs/workbench/contrib/extensions/electron-browser/extensionTipsService';
-import { TestExtensionEnablementService } from 'vs/workbench/services/extensionManagement/test/electron-browser/extensionEnablementService.test';
+import { ExtensionTipsService } from 'vs/workbench/contrib/extensions/browser/extensionTipsService';
+import { TestExtensionEnablementService } from 'vs/workbench/services/extensionManagement/test/browser/extensionEnablementService.test';
 import { ExtensionGalleryService } from 'vs/platform/extensionManagement/common/extensionGalleryService';
 import { IURLService } from 'vs/platform/url/common/url';
 import { Emitter } from 'vs/base/common/event';
@@ -27,25 +27,26 @@ import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { NullTelemetryService } from 'vs/platform/telemetry/common/telemetryUtils';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
-import { TestContextService, TestWindowService, TestSharedProcessService } from 'vs/workbench/test/workbenchTestServices';
+import { TestMenuService } from 'vs/workbench/test/browser/workbenchTestServices';
+import { TestSharedProcessService } from 'vs/workbench/test/electron-browser/workbenchTestServices';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { ILogService, NullLogService } from 'vs/platform/log/common/log';
-import { IWindowService } from 'vs/platform/windows/common/windows';
-import { URLService } from 'vs/platform/url/common/urlService';
+import { URLService } from 'vs/platform/url/node/urlService';
 import { URI } from 'vs/base/common/uri';
 import { TestConfigurationService } from 'vs/platform/configuration/test/common/testConfigurationService';
 import { SinonStub } from 'sinon';
-import { IExperimentService, ExperimentState, ExperimentActionType } from 'vs/workbench/contrib/experiments/common/experimentService';
-import { ExperimentService } from 'vs/workbench/contrib/experiments/electron-browser/experimentService';
+import { IExperimentService, ExperimentState, ExperimentActionType, ExperimentService } from 'vs/workbench/contrib/experiments/common/experimentService';
 import { IRemoteAgentService } from 'vs/workbench/services/remote/common/remoteAgentService';
 import { RemoteAgentService } from 'vs/workbench/services/remote/electron-browser/remoteAgentServiceImpl';
 import { ExtensionIdentifier, ExtensionType, IExtensionDescription } from 'vs/platform/extensions/common/extensions';
 import { ISharedProcessService } from 'vs/platform/ipc/electron-browser/sharedProcessService';
 import { ExtensionManagementServerService } from 'vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService';
-import { IProductService } from 'vs/platform/product/common/product';
+import { IProductService } from 'vs/platform/product/common/productService';
 import { ILabelService } from 'vs/platform/label/common/label';
 import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
 import { MockContextKeyService } from 'vs/platform/keybinding/test/common/mockKeybindingService';
+import { IMenuService } from 'vs/platform/actions/common/actions';
+import { TestContextService } from 'vs/workbench/test/common/workbenchTestServices';
 
 
 suite('ExtensionsListView Tests', () => {
@@ -80,7 +81,6 @@ suite('ExtensionsListView Tests', () => {
 		instantiationService = new TestInstantiationService();
 		instantiationService.stub(ITelemetryService, NullTelemetryService);
 		instantiationService.stub(ILogService, NullLogService);
-		instantiationService.stub(IWindowService, TestWindowService);
 
 		instantiationService.stub(IWorkspaceContextService, new TestContextService());
 		instantiationService.stub(IConfigurationService, new TestConfigurationService());
@@ -95,7 +95,8 @@ suite('ExtensionsListView Tests', () => {
 		instantiationService.stub(IExtensionManagementService, 'onUninstallExtension', uninstallEvent.event);
 		instantiationService.stub(IExtensionManagementService, 'onDidUninstallExtension', didUninstallEvent.event);
 		instantiationService.stub(IRemoteAgentService, RemoteAgentService);
-		instantiationService.stub(IContextKeyService, MockContextKeyService);
+		instantiationService.stub(IContextKeyService, new MockContextKeyService());
+		instantiationService.stub(IMenuService, new TestMenuService());
 
 		instantiationService.stub(IExtensionManagementServerService, new class extends ExtensionManagementServerService {
 			private _localExtensionManagementServer: IExtensionManagementServer = { extensionManagementService: instantiationService.get(IExtensionManagementService), label: 'local', authority: 'vscode-local' };
@@ -106,7 +107,7 @@ suite('ExtensionsListView Tests', () => {
 			set localExtensionManagementServer(server: IExtensionManagementServer) { }
 		}());
 
-		instantiationService.stub(IExtensionEnablementService, new TestExtensionEnablementService(instantiationService));
+		instantiationService.stub(IWorkbenchExtensionEnablementService, new TestExtensionEnablementService(instantiationService));
 
 		instantiationService.stub(IExtensionTipsService, ExtensionTipsService);
 		instantiationService.stub(IURLService, URLService);
@@ -148,8 +149,8 @@ suite('ExtensionsListView Tests', () => {
 				]);
 			}
 		});
-		await (<TestExtensionEnablementService>instantiationService.get(IExtensionEnablementService)).setEnablement([localDisabledTheme], EnablementState.DisabledGlobally);
-		await (<TestExtensionEnablementService>instantiationService.get(IExtensionEnablementService)).setEnablement([localDisabledLanguage], EnablementState.DisabledGlobally);
+		await (<TestExtensionEnablementService>instantiationService.get(IWorkbenchExtensionEnablementService)).setEnablement([localDisabledTheme], EnablementState.DisabledGlobally);
+		await (<TestExtensionEnablementService>instantiationService.get(IWorkbenchExtensionEnablementService)).setEnablement([localDisabledLanguage], EnablementState.DisabledGlobally);
 
 		instantiationService.set(IExtensionsWorkbenchService, instantiationService.createInstance(ExtensionsWorkbenchService));
 		testableView = instantiationService.createInstance(ExtensionsListView, {});

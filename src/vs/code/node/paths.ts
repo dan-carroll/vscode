@@ -20,11 +20,10 @@ export function validatePaths(args: ParsedArgs): ParsedArgs {
 	}
 
 	// Normalize paths and watch out for goto line mode
-	const paths = doValidatePaths(args._, args.goto);
-
-	// Update environment
-	args._ = paths;
-	args.diff = args.diff && paths.length === 2;
+	if (!args['remote']) {
+		const paths = doValidatePaths(args._, args.goto);
+		args._ = paths;
+	}
 
 	return args;
 }

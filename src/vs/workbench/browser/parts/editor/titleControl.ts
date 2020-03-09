@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { applyDragImage } from 'vs/base/browser/dnd';
+import { applyDragImage, DataTransfers } from 'vs/base/browser/dnd';
 import { addDisposableListener, Dimension, EventType } from 'vs/base/browser/dom';
 import { StandardMouseEvent } from 'vs/base/browser/mouseEvent';
 import { ActionsOrientation, IActionViewItem } from 'vs/base/browser/ui/actionbar/actionbar';
@@ -26,7 +26,7 @@ import { INotificationService } from 'vs/platform/notification/common/notificati
 import { IQuickOpenService } from 'vs/platform/quickOpen/common/quickOpen';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { listActiveSelectionBackground, listActiveSelectionForeground } from 'vs/platform/theme/common/colorRegistry';
-import { ICssStyleCollector, ITheme, IThemeService, registerThemingParticipant } from 'vs/platform/theme/common/themeService';
+import { ICssStyleCollector, IColorTheme, IThemeService, registerThemingParticipant, Themable } from 'vs/platform/theme/common/themeService';
 import { prepareActions } from 'vs/workbench/browser/actions';
 import { DraggedEditorGroupIdentifier, DraggedEditorIdentifier, fillResourceDataTransfers, LocalSelectionTransfer } from 'vs/workbench/browser/dnd';
 import { BaseEditor } from 'vs/workbench/browser/parts/editor/baseEditor';
@@ -35,12 +35,11 @@ import { BreadcrumbsControl, IBreadcrumbsControlOptions } from 'vs/workbench/bro
 import { EDITOR_TITLE_HEIGHT, IEditorGroupsAccessor, IEditorGroupView } from 'vs/workbench/browser/parts/editor/editor';
 import { EditorCommandsContextActionRunner, IEditorCommandsContext, IEditorInput, toResource, IEditorPartOptions, SideBySideEditor, EditorPinnedContext } from 'vs/workbench/common/editor';
 import { ResourceContextKey } from 'vs/workbench/common/resources';
-import { Themable } from 'vs/workbench/common/theme';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { AnchorAlignment } from 'vs/base/browser/ui/contextview/contextview';
 import { IFileService } from 'vs/platform/files/common/files';
-import { withNullAsUndefined, withUndefinedAsNull } from 'vs/base/common/types';
-import { ILabelService } from 'vs/platform/label/common/label';
+import { withNullAsUndefined, withUndefinedAsNull, assertIsDefined } from 'vs/base/common/types';
+import { isFirefox } from 'vs/base/browser/browser';
 
 export interface IToolbarActions {
 	primary: IAction[];
@@ -57,7 +56,7 @@ export abstract class TitleControl extends Themable {
 	private currentPrimaryEditorActionIds: string[] = [];
 	private currentSecondaryEditorActionIds: string[] = [];
 
-	protected editorActionsToolbar: ToolBar;
+	private editorActionsToolbar: ToolBar | undefined;
 
 	private resourceContext: ResourceContextKey;
 	private editorPinnedContext: IContextKey<boolean>;
@@ -81,8 +80,7 @@ export abstract class TitleControl extends Themable {
 		@IThemeService themeService: IThemeService,
 		@IExtensionService private readonly extensionService: IExtensionService,
 		@IConfigurationService protected configurationService: IConfigurationService,
-		@IFileService private readonly fileService: IFileService,
-		@ILabelService private readonly labelService: ILabelService
+		@IFileService private readonly fileService: IFileService
 	) {
 		super(themeService);
 
@@ -96,8 +94,9 @@ export abstract class TitleControl extends Themable {
 	}
 
 	private registerListeners(): void {
+
+		// Update actions toolbar when extension register that may contribute them
 		this._register(this.extensionService.onDidRegisterExtensions(() => this.updateEditorActionsToolbar()));
-		this._register(this.labelService.onDidChangeFormatters(() => this.updateEditorLabels()));
 	}
 
 	protected abstract create(parent: HTMLElement): void;
@@ -158,12 +157,12 @@ export abstract class TitleControl extends Themable {
 	}
 
 	private actionViewItemProvider(action: IAction): IActionViewItem | undefined {
-		const activeControl = this.group.activeControl;
+		const activeEditorPane = this.group.activeEditorPane;
 
 		// Check Active Editor
 		let actionViewItem: IActionViewItem | undefined = undefined;
-		if (activeControl instanceof BaseEditor) {
-			actionViewItem = activeControl.getActionViewItem(action);
+		if (activeEditorPane instanceof BaseEditor) {
+			actionViewItem = activeEditorPane.getActionViewItem(action);
 		}
 
 		// Check extensions
@@ -188,7 +187,8 @@ export abstract class TitleControl extends Themable {
 			primaryEditorActions.some(action => action instanceof ExecuteCommandAction) || // execute command actions can have the same ID but different arguments
 			secondaryEditorActions.some(action => action instanceof ExecuteCommandAction)  // see also https://github.com/Microsoft/vscode/issues/16298
 		) {
-			this.editorActionsToolbar.setActions(primaryEditorActions, secondaryEditorActions)();
+			const editorActionsToolbar = assertIsDefined(this.editorActionsToolbar);
+			editorActionsToolbar.setActions(primaryEditorActions, secondaryEditorActions)();
 
 			this.currentPrimaryEditorActionIds = primaryEditorActionIds;
 			this.currentSecondaryEditorActionIds = secondaryEditorActionIds;
@@ -224,10 +224,10 @@ export abstract class TitleControl extends Themable {
 		this.editorPinnedContext.set(this.group.activeEditor ? this.group.isPinned(this.group.activeEditor) : false);
 
 		// Editor actions require the editor control to be there, so we retrieve it via service
-		const activeControl = this.group.activeControl;
-		if (activeControl instanceof BaseEditor) {
-			const codeEditor = getCodeEditor(activeControl.getControl());
-			const scopedContextKeyService = codeEditor && codeEditor.invokeWithinContext(accessor => accessor.get(IContextKeyService)) || this.contextKeyService;
+		const activeEditorPane = this.group.activeEditorPane;
+		if (activeEditorPane instanceof BaseEditor) {
+			const codeEditor = getCodeEditor(activeEditorPane.getControl());
+			const scopedContextKeyService = codeEditor?.invokeWithinContext(accessor => accessor.get(IContextKeyService)) || this.contextKeyService;
 			const titleBarMenu = this.menuService.createMenu(MenuId.EditorTitle, scopedContextKeyService);
 			this.editorToolBarMenuDisposables.add(titleBarMenu);
 			this.editorToolBarMenuDisposables.add(titleBarMenu.onDidChange(() => {
@@ -241,7 +241,9 @@ export abstract class TitleControl extends Themable {
 	}
 
 	protected clearEditorActionsToolbar(): void {
-		this.editorActionsToolbar.setActions([], [])();
+		if (this.editorActionsToolbar) {
+			this.editorActionsToolbar.setActions([], [])();
+		}
 
 		this.currentPrimaryEditorActionIds = [];
 		this.currentSecondaryEditorActionIds = [];
@@ -257,14 +259,23 @@ export abstract class TitleControl extends Themable {
 
 			// Set editor group as transfer
 			this.groupTransfer.setData([new DraggedEditorGroupIdentifier(this.group.id)], DraggedEditorGroupIdentifier.prototype);
-			e.dataTransfer!.effectAllowed = 'copyMove';
+			if (e.dataTransfer) {
+				e.dataTransfer.effectAllowed = 'copyMove';
+			}
 
 			// If tabs are disabled, treat dragging as if an editor tab was dragged
+			let hasDataTransfer = false;
 			if (!this.accessor.partOptions.showTabs) {
 				const resource = this.group.activeEditor ? toResource(this.group.activeEditor, { supportSideBySide: SideBySideEditor.MASTER }) : null;
 				if (resource) {
 					this.instantiationService.invokeFunction(fillResourceDataTransfers, [resource], e);
+					hasDataTransfer = true;
 				}
+			}
+
+			// Firefox: requires to set a text data transfer to get going
+			if (!hasDataTransfer && isFirefox) {
+				e.dataTransfer?.setData(DataTransfers.TEXT, String(this.group.label));
 			}
 
 			// Drag Image
@@ -376,7 +387,7 @@ export abstract class TitleControl extends Themable {
 	}
 }
 
-registerThemingParticipant((theme: ITheme, collector: ICssStyleCollector) => {
+registerThemingParticipant((theme: IColorTheme, collector: ICssStyleCollector) => {
 
 	// Drag Feedback
 	const dragImageBackground = theme.getColor(listActiveSelectionBackground);

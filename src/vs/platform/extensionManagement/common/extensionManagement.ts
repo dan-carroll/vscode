@@ -146,7 +146,7 @@ export interface ITranslation {
 }
 
 export interface IExtensionGalleryService {
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 	isEnabled(): boolean;
 	query(token: CancellationToken): Promise<IPager<IGalleryExtension>>;
 	query(options: IQueryOptions, token: CancellationToken): Promise<IPager<IGalleryExtension>>;
@@ -182,11 +182,12 @@ export interface DidUninstallExtensionEvent {
 	error?: string;
 }
 
+export const INSTALL_ERROR_NOT_SUPPORTED = 'notsupported';
 export const INSTALL_ERROR_MALICIOUS = 'malicious';
 export const INSTALL_ERROR_INCOMPATIBLE = 'incompatible';
 
 export interface IExtensionManagementService {
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 
 	onInstallExtension: Event<InstallExtensionEvent>;
 	onDidInstallExtension: Event<DidInstallExtensionEvent>;
@@ -195,6 +196,7 @@ export interface IExtensionManagementService {
 
 	zip(extension: ILocalExtension): Promise<URI>;
 	unzip(zipLocation: URI, type: ExtensionType): Promise<IExtensionIdentifier>;
+	getManifest(vsix: URI): Promise<IExtensionManifest>;
 	install(vsix: URI): Promise<ILocalExtension>;
 	installFromGallery(extension: IGalleryExtension): Promise<ILocalExtension>;
 	uninstall(extension: ILocalExtension, force?: boolean): Promise<void>;
@@ -203,6 +205,20 @@ export interface IExtensionManagementService {
 	getExtensionsReport(): Promise<IReportedExtension[]>;
 
 	updateMetadata(local: ILocalExtension, metadata: IGalleryMetadata): Promise<ILocalExtension>;
+}
+
+export const DISABLED_EXTENSIONS_STORAGE_PATH = 'extensionsIdentifiers/disabled';
+export const ENABLED_EXTENSIONS_STORAGE_PATH = 'extensionsIdentifiers/enabled';
+export const IGlobalExtensionEnablementService = createDecorator<IGlobalExtensionEnablementService>('IGlobalExtensionEnablementService');
+
+export interface IGlobalExtensionEnablementService {
+	_serviceBrand: undefined;
+	readonly onDidChangeEnablement: Event<{ readonly extensions: IExtensionIdentifier[], readonly source?: string }>;
+
+	getDisabledExtensions(): IExtensionIdentifier[];
+	enableExtension(extension: IExtensionIdentifier, source?: string): Promise<boolean>;
+	disableExtension(extension: IExtensionIdentifier, source?: string): Promise<boolean>;
+
 }
 
 export const ExtensionsLabel = localize('extensions', "Extensions");

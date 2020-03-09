@@ -12,7 +12,7 @@ import { TokenTheme } from 'vs/editor/common/modes/supports/tokenization';
 import { ILineTokens, IToken, TokenizationSupport2Adapter, TokensProvider } from 'vs/editor/standalone/browser/standaloneLanguages';
 import { IStandaloneTheme, IStandaloneThemeData, IStandaloneThemeService } from 'vs/editor/standalone/common/standaloneThemeService';
 import { ColorIdentifier } from 'vs/platform/theme/common/colorRegistry';
-import { IIconTheme, ITheme, LIGHT } from 'vs/platform/theme/common/themeService';
+import { IFileIconTheme, IColorTheme, LIGHT, ITokenStyle } from 'vs/platform/theme/common/themeService';
 
 suite('TokenizationSupport2Adapter', () => {
 
@@ -33,14 +33,14 @@ suite('TokenizationSupport2Adapter', () => {
 	}
 
 	class MockThemeService implements IStandaloneThemeService {
-		_serviceBrand = <any>null;
+		_serviceBrand: undefined;
 		public setTheme(themeName: string): string {
 			throw new Error('Not implemented');
 		}
 		public defineTheme(themeName: string, themeData: IStandaloneThemeData): void {
 			throw new Error('Not implemented');
 		}
-		public getTheme(): IStandaloneTheme {
+		public getColorTheme(): IStandaloneTheme {
 			return {
 				tokenTheme: new MockTokenTheme(),
 
@@ -54,18 +54,25 @@ suite('TokenizationSupport2Adapter', () => {
 
 				defines: (color: ColorIdentifier): boolean => {
 					throw new Error('Not implemented');
-				}
+				},
+
+				getTokenStyleMetadata: (type: string, modifiers: string[]): ITokenStyle | undefined => {
+					return undefined;
+				},
+
+				tokenColorMap: []
 			};
 		}
-		public getIconTheme(): IIconTheme {
+
+		public getFileIconTheme(): IFileIconTheme {
 			return {
 				hasFileIcons: false,
 				hasFolderIcons: false,
 				hidesExplorerArrows: false
 			};
 		}
-		public readonly onThemeChange = new Emitter<ITheme>().event;
-		public readonly onIconThemeChange = new Emitter<IIconTheme>().event;
+		public readonly onDidColorThemeChange = new Emitter<IColorTheme>().event;
+		public readonly onDidFileIconThemeChange = new Emitter<IFileIconTheme>().event;
 	}
 
 	class MockState implements IState {

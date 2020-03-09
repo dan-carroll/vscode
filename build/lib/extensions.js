@@ -4,6 +4,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.packageMarketplaceExtensionsStream = exports.packageLocalExtensionsStream = exports.fromMarketplace = void 0;
 const es = require("event-stream");
 const fs = require("fs");
 const glob = require("glob");
@@ -27,14 +28,21 @@ const util = require('./util');
 const root = path.dirname(path.dirname(__dirname));
 const commit = util.getVersion(root);
 const sourceMappingURLBase = `https://ticino.blob.core.windows.net/sourcemaps/${commit}`;
+const product = require('../../product.json');
 function fromLocal(extensionPath) {
     const webpackFilename = path.join(extensionPath, 'extension.webpack.config.js');
-    if (fs.existsSync(webpackFilename)) {
-        return fromLocalWebpack(extensionPath);
-    }
-    else {
-        return fromLocalNormal(extensionPath);
-    }
+    const input = fs.existsSync(webpackFilename)
+        ? fromLocalWebpack(extensionPath)
+        : fromLocalNormal(extensionPath);
+    const tmLanguageJsonFilter = filter('**/*.tmLanguage.json', { restore: true });
+    return input
+        .pipe(tmLanguageJsonFilter)
+        .pipe(buffer())
+        .pipe(es.mapSync((f) => {
+        f.contents = Buffer.from(JSON.stringify(JSON.parse(f.contents.toString('utf8'))));
+        return f;
+    }))
+        .pipe(tmLanguageJsonFilter.restore);
 }
 function fromLocalWebpack(extensionPath) {
     const result = es.through();
@@ -95,7 +103,7 @@ function fromLocalWebpack(extensionPath) {
                     result.emit('error', compilation.warnings.join('\n'));
                 }
             };
-            const webpackConfig = Object.assign({}, require(webpackConfigPath), { mode: 'production' });
+            const webpackConfig = Object.assign(Object.assign({}, require(webpackConfigPath)), { mode: 'production' });
             const relativeOutputPath = path.relative(extensionPath, webpackConfig.output.path);
             return webpackGulp(webpackConfig, webpack, webpackDone)
                 .pipe(es.through(function (data) {
@@ -178,8 +186,10 @@ const excludedExtensions = [
     'vscode-test-resolver',
     'ms-vscode.node-debug',
     'ms-vscode.node-debug2',
+    'ms.vscode.js-debug-nightly'
 ];
-const builtInExtensions = require('../builtInExtensions.json');
+const builtInExtensions = require('../builtInExtensions.json')
+    .filter(({ forQualities }) => { var _a; return !product.quality || ((_a = forQualities === null || forQualities === void 0 ? void 0 : forQualities.includes) === null || _a === void 0 ? void 0 : _a.call(forQualities, product.quality)) !== false; });
 function packageLocalExtensionsStream() {
     const localExtensionDescriptions = glob.sync('extensions/*/package.json')
         .map(manifestPath => {

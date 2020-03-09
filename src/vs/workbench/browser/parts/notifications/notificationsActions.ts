@@ -23,13 +23,11 @@ export class ClearNotificationAction extends Action {
 		label: string,
 		@ICommandService private readonly commandService: ICommandService
 	) {
-		super(id, label, 'clear-notification-action');
+		super(id, label, 'codicon-close');
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	async run(notification: INotificationViewItem): Promise<void> {
 		this.commandService.executeCommand(CLEAR_NOTIFICATION, notification);
-
-		return Promise.resolve();
 	}
 }
 
@@ -43,13 +41,11 @@ export class ClearAllNotificationsAction extends Action {
 		label: string,
 		@ICommandService private readonly commandService: ICommandService
 	) {
-		super(id, label, 'clear-all-notifications-action');
+		super(id, label, 'codicon-clear-all');
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	async run(): Promise<void> {
 		this.commandService.executeCommand(CLEAR_ALL_NOTIFICATIONS);
-
-		return Promise.resolve();
 	}
 }
 
@@ -63,13 +59,11 @@ export class HideNotificationsCenterAction extends Action {
 		label: string,
 		@ICommandService private readonly commandService: ICommandService
 	) {
-		super(id, label, 'hide-all-notifications-action');
+		super(id, label, 'codicon-chevron-down');
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	async run(): Promise<void> {
 		this.commandService.executeCommand(HIDE_NOTIFICATIONS_CENTER);
-
-		return Promise.resolve();
 	}
 }
 
@@ -83,13 +77,11 @@ export class ExpandNotificationAction extends Action {
 		label: string,
 		@ICommandService private readonly commandService: ICommandService
 	) {
-		super(id, label, 'expand-notification-action');
+		super(id, label, 'codicon-chevron-up');
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	async run(notification: INotificationViewItem): Promise<void> {
 		this.commandService.executeCommand(EXPAND_NOTIFICATION, notification);
-
-		return Promise.resolve();
 	}
 }
 
@@ -103,13 +95,11 @@ export class CollapseNotificationAction extends Action {
 		label: string,
 		@ICommandService private readonly commandService: ICommandService
 	) {
-		super(id, label, 'collapse-notification-action');
+		super(id, label, 'codicon-chevron-down');
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	async run(notification: INotificationViewItem): Promise<void> {
 		this.commandService.executeCommand(COLLAPSE_NOTIFICATION, notification);
-
-		return Promise.resolve();
 	}
 }
 
@@ -121,13 +111,9 @@ export class ConfigureNotificationAction extends Action {
 	constructor(
 		id: string,
 		label: string,
-		private readonly _configurationActions: ReadonlyArray<IAction>
+		public readonly configurationActions: ReadonlyArray<IAction>
 	) {
-		super(id, label, 'configure-notification-action');
-	}
-
-	get configurationActions(): ReadonlyArray<IAction> {
-		return this._configurationActions;
+		super(id, label, 'codicon-gear');
 	}
 }
 
@@ -144,7 +130,7 @@ export class CopyNotificationMessageAction extends Action {
 		super(id, label);
 	}
 
-	run(notification: INotificationViewItem): Promise<any> {
+	run(notification: INotificationViewItem): Promise<void> {
 		return this.clipboardService.writeText(notification.message.raw);
 	}
 }
@@ -158,7 +144,7 @@ export class NotificationActionRunner extends ActionRunner {
 		super();
 	}
 
-	protected async runAction(action: IAction, context: INotificationViewItem): Promise<any> {
+	protected async runAction(action: IAction, context: INotificationViewItem): Promise<void> {
 		this.telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: action.id, from: 'message' });
 
 		// Run and make sure to notify on any error again

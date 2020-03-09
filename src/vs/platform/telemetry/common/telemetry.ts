@@ -12,6 +12,7 @@ export interface ITelemetryInfo {
 	sessionId: string;
 	machineId: string;
 	instanceId: string;
+	msftInternal?: boolean;
 }
 
 export interface ITelemetryData {
@@ -22,7 +23,7 @@ export interface ITelemetryData {
 
 export interface ITelemetryService {
 
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 
 	/**
 	 * Sends a telemetry event that has been privacy approved.
@@ -44,3 +45,4 @@ export const instanceStorageKey = 'telemetry.instanceId';
 export const currentSessionDateStorageKey = 'telemetry.currentSessionDate';
 export const firstSessionDateStorageKey = 'telemetry.firstSessionDate';
 export const lastSessionDateStorageKey = 'telemetry.lastSessionDate';
+export const crashReporterIdStorageKey = 'crashReporter.guid';

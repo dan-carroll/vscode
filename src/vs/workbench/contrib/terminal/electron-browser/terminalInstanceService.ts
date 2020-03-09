@@ -3,16 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ITerminalInstanceService } from 'vs/workbench/contrib/terminal/browser/terminal';
-import { ITerminalInstance, IWindowsShellHelper, IShellLaunchConfig, ITerminalChildProcess, IS_WORKSPACE_SHELL_ALLOWED_STORAGE_KEY } from 'vs/workbench/contrib/terminal/common/terminal';
-import { WindowsShellHelper } from 'vs/workbench/contrib/terminal/node/windowsShellHelper';
+import { ITerminalInstanceService, ITerminalInstance } from 'vs/workbench/contrib/terminal/browser/terminal';
+import { IWindowsShellHelper, IShellLaunchConfig, ITerminalChildProcess, IS_WORKSPACE_SHELL_ALLOWED_STORAGE_KEY } from 'vs/workbench/contrib/terminal/common/terminal';
+import { WindowsShellHelper } from 'vs/workbench/contrib/terminal/electron-browser/windowsShellHelper';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IProcessEnvironment, platform, Platform } from 'vs/base/common/platform';
 import { TerminalProcess } from 'vs/workbench/contrib/terminal/node/terminalProcess';
 import { getSystemShell } from 'vs/workbench/contrib/terminal/node/terminal';
 import { Terminal as XTermTerminal } from 'xterm';
-import { WebLinksAddon as XTermWebLinksAddon } from 'xterm-addon-web-links';
 import { SearchAddon as XTermSearchAddon } from 'xterm-addon-search';
+import { Unicode11Addon as XTermUnicode11Addon } from 'xterm-addon-unicode11';
+import { WebLinksAddon as XTermWebLinksAddon } from 'xterm-addon-web-links';
+import { WebglAddon as XTermWebglAddon } from 'xterm-addon-webgl';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { getDefaultShell, getDefaultShellArgs } from 'vs/workbench/contrib/terminal/common/terminalEnvironment';
 import { StorageScope, IStorageService } from 'vs/platform/storage/common/storage';
@@ -23,11 +25,13 @@ import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace
 import { ILogService } from 'vs/platform/log/common/log';
 
 let Terminal: typeof XTermTerminal;
-let WebLinksAddon: typeof XTermWebLinksAddon;
 let SearchAddon: typeof XTermSearchAddon;
+let Unicode11Addon: typeof XTermUnicode11Addon;
+let WebLinksAddon: typeof XTermWebLinksAddon;
+let WebglAddon: typeof XTermWebglAddon;
 
 export class TerminalInstanceService implements ITerminalInstanceService {
-	public _serviceBrand: any;
+	public _serviceBrand: undefined;
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
@@ -61,6 +65,20 @@ export class TerminalInstanceService implements ITerminalInstanceService {
 		return SearchAddon;
 	}
 
+	public async getXtermUnicode11Constructor(): Promise<typeof XTermUnicode11Addon> {
+		if (!Unicode11Addon) {
+			Unicode11Addon = (await import('xterm-addon-unicode11')).Unicode11Addon;
+		}
+		return Unicode11Addon;
+	}
+
+	public async getXtermWebglConstructor(): Promise<typeof XTermWebglAddon> {
+		if (!WebglAddon) {
+			WebglAddon = (await import('xterm-addon-webgl')).WebglAddon;
+		}
+		return WebglAddon;
+	}
+
 	public createWindowsShellHelper(shellProcessId: number, instance: ITerminalInstance, xterm: XTermTerminal): IWindowsShellHelper {
 		return new WindowsShellHelper(shellProcessId, instance, xterm);
 	}
@@ -73,7 +91,7 @@ export class TerminalInstanceService implements ITerminalInstanceService {
 		return this._storageService.getBoolean(IS_WORKSPACE_SHELL_ALLOWED_STORAGE_KEY, StorageScope.WORKSPACE, false);
 	}
 
-	public getDefaultShellAndArgs(platformOverride: Platform = platform): Promise<{ shell: string, args: string | string[] }> {
+	public getDefaultShellAndArgs(useAutomationShell: boolean, platformOverride: Platform = platform): Promise<{ shell: string, args: string | string[] }> {
 		const isWorkspaceShellAllowed = this._isWorkspaceShellAllowed();
 		const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot();
 		let lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) : undefined;
@@ -87,11 +105,13 @@ export class TerminalInstanceService implements ITerminalInstanceService {
 			lastActiveWorkspace,
 			this._configurationResolverService,
 			this._logService,
+			useAutomationShell,
 			platformOverride
 		);
 		const args = getDefaultShellArgs(
 			(key) => this._configurationService.inspect(key),
 			isWorkspaceShellAllowed,
+			useAutomationShell,
 			lastActiveWorkspace,
 			this._configurationResolverService,
 			this._logService,

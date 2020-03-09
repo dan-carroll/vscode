@@ -12,36 +12,36 @@ import { URI as uri } from 'vs/base/common/uri';
 import { getNextTickChannel } from 'vs/base/parts/ipc/common/ipc';
 import { Client, IIPCOptions } from 'vs/base/parts/ipc/node/ipc.cp';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
-import { IDebugParams, IEnvironmentService } from 'vs/platform/environment/common/environment';
+import { IDebugParams } from 'vs/platform/environment/common/environment';
+import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService';
 import { IFileService } from 'vs/platform/files/common/files';
 import { ILogService } from 'vs/platform/log/common/log';
-import { FileMatch, IFileMatch, IFileQuery, IProgressMessage, IRawSearchService, ISearchComplete, ISearchConfiguration, ISearchProgressItem, ISearchResultProvider, ISerializedFileMatch, ISerializedSearchComplete, ISerializedSearchProgressItem, isSerializedSearchComplete, isSerializedSearchSuccess, ITextQuery, ISearchService } from 'vs/workbench/services/search/common/search';
+import { FileMatch, IFileMatch, IFileQuery, IProgressMessage, IRawSearchService, ISearchComplete, ISearchConfiguration, ISearchProgressItem, ISearchResultProvider, ISerializedFileMatch, ISerializedSearchComplete, ISerializedSearchProgressItem, isSerializedSearchComplete, isSerializedSearchSuccess, ITextQuery, ISearchService, isFileMatch } from 'vs/workbench/services/search/common/search';
 import { SearchChannelClient } from './searchIpc';
 import { SearchService } from 'vs/workbench/services/search/common/searchService';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IModelService } from 'vs/editor/common/services/modelService';
-import { IUntitledEditorService } from 'vs/workbench/services/untitled/common/untitledEditorService';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import { parseSearchPort } from 'vs/platform/environment/node/environmentService';
 
 export class LocalSearchService extends SearchService {
 	constructor(
 		@IModelService modelService: IModelService,
-		@IUntitledEditorService untitledEditorService: IUntitledEditorService,
 		@IEditorService editorService: IEditorService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILogService logService: ILogService,
 		@IExtensionService extensionService: IExtensionService,
 		@IFileService fileService: IFileService,
-		@IEnvironmentService readonly environmentService: IEnvironmentService,
+		@IWorkbenchEnvironmentService readonly environmentService: IWorkbenchEnvironmentService,
 		@IInstantiationService readonly instantiationService: IInstantiationService
 	) {
-		super(modelService, untitledEditorService, editorService, telemetryService, logService, extensionService, fileService);
+		super(modelService, editorService, telemetryService, logService, extensionService, fileService);
 
 
-		this.diskSearch = instantiationService.createInstance(DiskSearch, !environmentService.isBuilt || environmentService.verbose, environmentService.debugSearch);
+		this.diskSearch = instantiationService.createInstance(DiskSearch, !environmentService.isBuilt || environmentService.verbose, parseSearchPort(environmentService.args, environmentService.isBuilt));
 	}
 }
 
@@ -119,8 +119,8 @@ export class DiskSearch implements ISearchResultProvider {
 				let event: Event<ISerializedSearchProgressItem | ISerializedSearchComplete>;
 				event = this.raw.fileSearch(query);
 
-				const onProgress = (p: IProgressMessage) => {
-					if (p.message) {
+				const onProgress = (p: ISearchProgressItem) => {
+					if (!isFileMatch(p)) {
 						// Should only be for logs
 						this.logService.debug('SearchService#search', p.message);
 					}

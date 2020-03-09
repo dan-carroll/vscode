@@ -8,14 +8,14 @@ import { URI } from 'vs/base/common/uri';
 import { onUnexpectedError } from 'vs/base/common/errors';
 import { ThrottledDelayer } from 'vs/base/common/async';
 import { QuickOpenHandler, EditorQuickOpenEntry } from 'vs/workbench/browser/quickopen';
-import { QuickOpenModel, QuickOpenEntry, compareEntries } from 'vs/base/parts/quickopen/browser/quickOpenModel';
+import { QuickOpenModel, QuickOpenEntry, IHighlight } from 'vs/base/parts/quickopen/browser/quickOpenModel';
 import { IAutoFocus, Mode, IEntryRunContext } from 'vs/base/parts/quickopen/common/quickOpen';
 import * as filters from 'vs/base/common/filters';
 import * as strings from 'vs/base/common/strings';
 import { Range } from 'vs/editor/common/core/range';
 import { IWorkbenchEditorConfiguration } from 'vs/workbench/common/editor';
-import { symbolKindToCssClass } from 'vs/editor/common/modes';
-import { IResourceInput } from 'vs/platform/editor/common/editor';
+import { SymbolKinds, SymbolTag } from 'vs/editor/common/modes';
+import { IResourceEditorInput } from 'vs/platform/editor/common/editor';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { IWorkspaceSymbolProvider, getWorkspaceSymbols, IWorkspaceSymbol } from 'vs/workbench/contrib/search/common/search';
@@ -25,9 +25,12 @@ import { ILabelService } from 'vs/platform/label/common/label';
 import { CancellationToken } from 'vs/base/common/cancellation';
 import { Schemas } from 'vs/base/common/network';
 import { IOpenerService } from 'vs/platform/opener/common/opener';
+import { IIconLabelValueOptions } from 'vs/base/browser/ui/iconLabel/iconLabel';
 
 class SymbolEntry extends EditorQuickOpenEntry {
-	private bearingResolve: Promise<this | undefined>;
+
+	private bearingResolve?: Promise<this | undefined>;
+	private score?: filters.FuzzyScore;
 
 	constructor(
 		private bearing: IWorkspaceSymbol,
@@ -38,6 +41,14 @@ class SymbolEntry extends EditorQuickOpenEntry {
 		@IOpenerService private readonly openerService: IOpenerService
 	) {
 		super(editorService);
+	}
+
+	setScore(score: filters.FuzzyScore | undefined) {
+		this.score = score;
+	}
+
+	getHighlights(): [IHighlight[] | undefined /* Label */, IHighlight[] | undefined /* Description */, IHighlight[] | undefined /* Detail */] {
+		return [this.isDeprecated() ? [] : filters.createMatches(this.score), undefined, undefined];
 	}
 
 	getLabel(): string {
@@ -62,16 +73,24 @@ class SymbolEntry extends EditorQuickOpenEntry {
 	}
 
 	getIcon(): string {
-		return symbolKindToCssClass(this.bearing.kind);
+		return SymbolKinds.toCssClassName(this.bearing.kind);
+	}
+
+	getLabelOptions(): IIconLabelValueOptions | undefined {
+		return this.isDeprecated() ? { extraClasses: ['deprecated'] } : undefined;
 	}
 
 	getResource(): URI {
 		return this.bearing.location.uri;
 	}
 
+	private isDeprecated(): boolean {
+		return this.bearing.tags ? this.bearing.tags.indexOf(SymbolTag.Deprecated) >= 0 : false;
+	}
+
 	run(mode: Mode, context: IEntryRunContext): boolean {
 
-		// resolve this type bearing if neccessary
+		// resolve this type bearing if necessary
 		if (!this.bearingResolve && typeof this.provider.resolveWorkspaceSymbol === 'function' && !this.bearing.location.range) {
 			this.bearingResolve = Promise.resolve(this.provider.resolveWorkspaceSymbol(this.bearing, CancellationToken.None)).then(result => {
 				this.bearing = result || this.bearing;
@@ -85,7 +104,7 @@ class SymbolEntry extends EditorQuickOpenEntry {
 			const scheme = this.bearing.location.uri ? this.bearing.location.uri.scheme : undefined;
 			if (scheme === Schemas.http || scheme === Schemas.https) {
 				if (mode === Mode.OPEN || mode === Mode.OPEN_IN_BACKGROUND) {
-					this.openerService.open(this.bearing.location.uri); // support http/https resources (https://github.com/Microsoft/vscode/issues/58924))
+					this.openerService.open(this.bearing.location.uri, { fromUserGesture: true }); // support http/https resources (https://github.com/Microsoft/vscode/issues/58924))
 				}
 			} else {
 				super.run(mode, context);
@@ -96,33 +115,36 @@ class SymbolEntry extends EditorQuickOpenEntry {
 		return mode === Mode.OPEN;
 	}
 
-	getInput(): IResourceInput {
-		const input: IResourceInput = {
+	getInput(): IResourceEditorInput {
+		const input: IResourceEditorInput = {
 			resource: this.bearing.location.uri,
 			options: {
-				pinned: !this.configurationService.getValue<IWorkbenchEditorConfiguration>().workbench.editor.enablePreviewFromQuickOpen
+				pinned: !this.configurationService.getValue<IWorkbenchEditorConfiguration>().workbench.editor.enablePreviewFromQuickOpen,
+				selection: this.bearing.location.range ? Range.collapseToStart(this.bearing.location.range) : undefined
 			}
 		};
-
-		if (this.bearing.location.range) {
-			input.options!.selection = Range.collapseToStart(this.bearing.location.range);
-		}
 
 		return input;
 	}
 
-	static compare(elementA: SymbolEntry, elementB: SymbolEntry, searchValue: string): number {
-
-		// Sort by Type if name is identical
-		const elementAName = elementA.getLabel().toLowerCase();
-		const elementBName = elementB.getLabel().toLowerCase();
-		if (elementAName === elementBName) {
-			let elementAType = symbolKindToCssClass(elementA.bearing.kind);
-			let elementBType = symbolKindToCssClass(elementB.bearing.kind);
-			return elementAType.localeCompare(elementBType);
+	static compare(a: SymbolEntry, b: SymbolEntry, searchValue: string): number {
+		// order: score, name, kind
+		if (a.score && b.score) {
+			if (a.score[0] > b.score[0]) {
+				return -1;
+			} else if (a.score[0] < b.score[0]) {
+				return 1;
+			}
 		}
-
-		return compareEntries(elementA, elementB, searchValue);
+		const aName = a.getLabel().toLowerCase();
+		const bName = b.getLabel().toLowerCase();
+		let res = aName.localeCompare(bName);
+		if (res !== 0) {
+			return res;
+		}
+		let aKind = SymbolKinds.toCssClassName(a.bearing.kind);
+		let bKind = SymbolKinds.toCssClassName(b.bearing.kind);
+		return aKind.localeCompare(bKind);
 	}
 }
 
@@ -198,6 +220,9 @@ export class OpenSymbolHandler extends QuickOpenHandler {
 
 	private fillInSymbolEntries(bucket: SymbolEntry[], provider: IWorkspaceSymbolProvider, types: IWorkspaceSymbol[], searchValue: string): void {
 
+		const pattern = strings.stripWildcards(searchValue);
+		const patternLow = pattern.toLowerCase();
+
 		// Convert to Entries
 		for (let element of types) {
 			if (this.options.skipLocalSymbols && !!element.containerName) {
@@ -205,7 +230,11 @@ export class OpenSymbolHandler extends QuickOpenHandler {
 			}
 
 			const entry = this.instantiationService.createInstance(SymbolEntry, element, provider);
-			entry.setHighlights(filters.matchesFuzzy2(searchValue, entry.getLabel()) || []);
+			entry.setScore(filters.fuzzyScore(
+				pattern, patternLow, 0,
+				entry.getLabel(), entry.getLabel().toLowerCase(), 0,
+				true
+			));
 			bucket.push(entry);
 		}
 	}

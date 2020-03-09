@@ -121,15 +121,15 @@ export class ViewItem implements IViewItem {
 	public top: number;
 	public height: number;
 	public width: number = 0;
-	public onDragStart: (e: DragEvent) => void;
+	public onDragStart!: (e: DragEvent) => void;
 
-	public needsRender: boolean;
-	public uri: string | null;
+	public needsRender: boolean = false;
+	public uri: string | null = null;
 	public unbindDragStart: Lifecycle.IDisposable = Lifecycle.Disposable.None;
 	public loadingTimer: any;
 
 	public _styles: any;
-	private _draggable: boolean;
+	private _draggable: boolean = false;
 
 	constructor(context: IViewContext, model: Model.Item) {
 		this.context = context;
@@ -154,7 +154,7 @@ export class ViewItem implements IViewItem {
 	}
 
 	set loading(value: boolean) {
-		value ? this.addClass('loading') : this.removeClass('loading');
+		value ? this.addClass('codicon-loading') : this.removeClass('codicon-loading');
 	}
 
 	set draggable(value: boolean) {
@@ -174,7 +174,7 @@ export class ViewItem implements IViewItem {
 		return (this.row && this.row.element)!;
 	}
 
-	private _templateId: string;
+	private _templateId: string | undefined;
 	private get templateId(): string {
 		return this._templateId || (this._templateId = (this.context.renderer!.getTemplateId && this.context.renderer!.getTemplateId(this.context.tree, this.model.getElement())));
 	}
@@ -218,12 +218,11 @@ export class ViewItem implements IViewItem {
 		}
 		if (this.model.hasTrait('focused')) {
 			const base64Id = strings.safeBtoa(this.model.id);
-
-			this.element.setAttribute('aria-selected', 'true');
 			this.element.setAttribute('id', base64Id);
+			this.element.setAttribute('aria-selected', 'true');
 		} else {
-			this.element.setAttribute('aria-selected', 'false');
 			this.element.removeAttribute('id');
+			this.element.setAttribute('aria-selected', 'false');
 		}
 		if (this.model.hasChildren()) {
 			this.element.setAttribute('aria-expanded', String(!!this._styles['expanded']));
@@ -265,7 +264,7 @@ export class ViewItem implements IViewItem {
 			}
 
 			if (this.context.horizontalScrolling) {
-				this.element.style.width = 'fit-content';
+				this.element.style.width = Browser.isFirefox ? '-moz-fit-content' : 'fit-content';
 			}
 
 			try {
@@ -289,7 +288,7 @@ export class ViewItem implements IViewItem {
 
 		const style = window.getComputedStyle(this.element);
 		const paddingLeft = parseFloat(style.paddingLeft!);
-		this.element.style.width = 'fit-content';
+		this.element.style.width = Browser.isFirefox ? '-moz-fit-content' : 'fit-content';
 		this.width = DOM.getContentWidth(this.element) + paddingLeft;
 		this.element.style.width = '';
 	}
@@ -375,11 +374,6 @@ class RootViewItem extends ViewItem {
 	}
 }
 
-interface IThrottledGestureEvent {
-	translationX: number;
-	translationY: number;
-}
-
 function reactionEquals(one: _.IDragOverReaction, other: _.IDragOverReaction | null): boolean {
 	if (!one && !other) {
 		return true;
@@ -398,8 +392,8 @@ function reactionEquals(one: _.IDragOverReaction, other: _.IDragOverReaction | n
 
 export class TreeView extends HeightMap {
 
-	static BINDING = 'monaco-tree-row';
-	static LOADING_DECORATION_DELAY = 800;
+	static readonly BINDING = 'monaco-tree-row';
+	static readonly LOADING_DECORATION_DELAY = 800;
 
 	private static counter: number = 0;
 	private instance: number;
@@ -415,9 +409,8 @@ export class TreeView extends HeightMap {
 	private treeStyler: _.ITreeStyler;
 	private rowsContainer: HTMLElement;
 	private scrollableElement: ScrollableElement;
-	private msGesture: MSGesture;
-	private lastPointerType: string;
-	private lastClickTimeStamp: number = 0;
+	private msGesture: MSGesture | undefined;
+	private lastPointerType: string = '';
 
 	private horizontalScrolling: boolean;
 	private contentWidthUpdateDelayer = new Delayer<void>(50);
@@ -425,25 +418,26 @@ export class TreeView extends HeightMap {
 	private lastRenderTop: number;
 	private lastRenderHeight: number;
 
-	private inputItem: ViewItem;
+	private inputItem!: ViewItem;
 	private items: { [id: string]: ViewItem; };
 
 	private isRefreshing = false;
 	private refreshingPreviousChildrenIds: { [id: string]: string[] } = {};
 	private currentDragAndDropData: IDragAndDropData | null = null;
 	private currentDropElement: any;
-	private currentDropElementReaction: _.IDragOverReaction;
+	private currentDropElementReaction!: _.IDragOverReaction;
 	private currentDropTarget: ViewItem | null = null;
 	private shouldInvalidateDropReaction: boolean;
 	private currentDropTargets: ViewItem[] | null = null;
 	private currentDropDisposable: Lifecycle.IDisposable = Lifecycle.Disposable.None;
+	private gestureDisposable: Lifecycle.IDisposable = Lifecycle.Disposable.None;
 	private dragAndDropScrollInterval: number | null = null;
 	private dragAndDropScrollTimeout: number | null = null;
 	private dragAndDropMouseY: number | null = null;
 
 	private didJustPressContextMenuKey: boolean;
 
-	private highlightedItemWasDraggable: boolean;
+	private highlightedItemWasDraggable: boolean = false;
 	private onHiddenScrollTop: number | null = null;
 
 	private readonly _onDOMFocus = new Emitter<void>();
@@ -519,12 +513,7 @@ export class TreeView extends HeightMap {
 			this._onDidScroll.fire();
 		});
 
-		if (Browser.isIE) {
-			this.wrapper.style.msTouchAction = 'none';
-			this.wrapper.style.msContentZooming = 'none';
-		} else {
-			Touch.Gesture.addTarget(this.wrapper);
-		}
+		this.gestureDisposable = Touch.Gesture.addTarget(this.wrapper);
 
 		this.rowsContainer = document.createElement('div');
 		this.rowsContainer.className = 'monaco-tree-rows';
@@ -550,26 +539,6 @@ export class TreeView extends HeightMap {
 		this.viewListeners.push(DOM.addDisposableListener(this.domNode, 'contextmenu', (e) => this.onContextMenu(e)));
 		this.viewListeners.push(DOM.addDisposableListener(this.wrapper, Touch.EventType.Tap, (e) => this.onTap(e)));
 		this.viewListeners.push(DOM.addDisposableListener(this.wrapper, Touch.EventType.Change, (e) => this.onTouchChange(e)));
-
-		if (Browser.isIE) {
-			this.viewListeners.push(DOM.addDisposableListener(this.wrapper, 'MSPointerDown', (e) => this.onMsPointerDown(e)));
-			this.viewListeners.push(DOM.addDisposableListener(this.wrapper, 'MSGestureTap', (e) => this.onMsGestureTap(e)));
-
-			// these events come too fast, we throttle them
-			this.viewListeners.push(DOM.addDisposableThrottledListener<IThrottledGestureEvent>(this.wrapper, 'MSGestureChange', (e) => this.onThrottledMsGestureChange(e), (lastEvent: IThrottledGestureEvent, event: MSGestureEvent): IThrottledGestureEvent => {
-				event.stopPropagation();
-				event.preventDefault();
-
-				let result = { translationY: event.translationY, translationX: event.translationX };
-
-				if (lastEvent) {
-					result.translationY += lastEvent.translationY;
-					result.translationX += lastEvent.translationX;
-				}
-
-				return result;
-			}));
-		}
 
 		this.viewListeners.push(DOM.addDisposableListener(window, 'dragover', (e) => this.onDragOver(e)));
 		this.viewListeners.push(DOM.addDisposableListener(this.wrapper, 'drop', (e) => this.onDrop(e)));
@@ -633,7 +602,7 @@ export class TreeView extends HeightMap {
 	private setupMSGesture(): void {
 		if ((<any>window).MSGesture) {
 			this.msGesture = new MSGesture();
-			setTimeout(() => this.msGesture.target = this.wrapper, 100); // TODO@joh, TODO@IETeam
+			setTimeout(() => this.msGesture!.target = this.wrapper, 100); // TODO@joh, TODO@IETeam
 		}
 	}
 
@@ -924,16 +893,15 @@ export class TreeView extends HeightMap {
 			if (!skipDiff) {
 				const lcs = new Diff.LcsDiff(
 					{
-						getLength: () => previousChildrenIds.length,
-						getElementAtIndex: (i: number) => previousChildrenIds[i]
-					}, {
-						getLength: () => afterModelItems.length,
-						getElementAtIndex: (i: number) => afterModelItems[i].id
+						getElements: () => previousChildrenIds
+					},
+					{
+						getElements: () => afterModelItems.map(item => item.id)
 					},
 					null
 				);
 
-				diff = lcs.ComputeDiff(false);
+				diff = lcs.ComputeDiff(false).changes;
 
 				// this means that the result of the diff algorithm would result
 				// in inserting items that were already registered. this can only
@@ -1143,15 +1111,6 @@ export class TreeView extends HeightMap {
 		if (!item) {
 			return;
 		}
-
-		if (Browser.isIE && Date.now() - this.lastClickTimeStamp < 300) {
-			// IE10+ doesn't set the detail property correctly. While IE10 simply
-			// counts the number of clicks, IE11 reports always 1. To align with
-			// other browser, we set the value to 2 if clicks events come in a 300ms
-			// sequence.
-			event.detail = 2;
-		}
-		this.lastClickTimeStamp = Date.now();
 
 		this.context.controller!.onClick(this.context.tree, item.model.getElement(), event);
 	}
@@ -1563,39 +1522,6 @@ export class TreeView extends HeightMap {
 		this._onDOMBlur.fire();
 	}
 
-	// MS specific DOM Events
-
-	private onMsPointerDown(event: MSPointerEvent): void {
-		if (!this.msGesture) {
-			return;
-		}
-
-		// Circumvent IE11 breaking change in e.pointerType & TypeScript's stale definitions
-		let pointerType = event.pointerType;
-		if (pointerType === ((<any>event).MSPOINTER_TYPE_MOUSE || 'mouse')) {
-			this.lastPointerType = 'mouse';
-			return;
-		} else if (pointerType === ((<any>event).MSPOINTER_TYPE_TOUCH || 'touch')) {
-			this.lastPointerType = 'touch';
-		} else {
-			return;
-		}
-
-		event.stopPropagation();
-		event.preventDefault();
-
-		this.msGesture.addPointer(event.pointerId);
-	}
-
-	private onThrottledMsGestureChange(event: IThrottledGestureEvent): void {
-		this.scrollTop -= event.translationY;
-	}
-
-	private onMsGestureTap(event: MSGestureEvent): void {
-		(<any>event).initialTarget = document.elementFromPoint(event.clientX, event.clientY);
-		this.onTap(<any>event);
-	}
-
 	// DOM changes
 
 	private insertItemInDOM(item: ViewItem): void {
@@ -1675,6 +1601,7 @@ export class TreeView extends HeightMap {
 		if (this.context.cache) {
 			this.context.cache.dispose();
 		}
+		this.gestureDisposable.dispose();
 
 		super.dispose();
 	}

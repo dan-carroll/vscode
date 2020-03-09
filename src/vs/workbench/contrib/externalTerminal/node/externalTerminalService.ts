@@ -23,7 +23,7 @@ const TERMINAL_TITLE = nls.localize('console.title', "VS Code Console");
 export const DEFAULT_TERMINAL_OSX = 'Terminal.app';
 
 export class WindowsExternalTerminalService implements IExternalTerminalService {
-	public _serviceBrand: any;
+	public _serviceBrand: undefined;
 
 	private static readonly CMD = 'cmd.exe';
 
@@ -118,7 +118,7 @@ export class WindowsExternalTerminalService implements IExternalTerminalService 
 }
 
 export class MacExternalTerminalService implements IExternalTerminalService {
-	public _serviceBrand: any;
+	public _serviceBrand: undefined;
 
 	private static readonly OSASCRIPT = '/usr/bin/osascript';	// osascript is the AppleScript interpreter on OS X
 
@@ -214,7 +214,7 @@ export class MacExternalTerminalService implements IExternalTerminalService {
 }
 
 export class LinuxExternalTerminalService implements IExternalTerminalService {
-	public _serviceBrand: any;
+	public _serviceBrand: undefined;
 
 	private static readonly WAIT_MESSAGE = nls.localize('press.any.key', "Press any key to continue...");
 
@@ -301,29 +301,28 @@ export class LinuxExternalTerminalService implements IExternalTerminalService {
 
 	private static _DEFAULT_TERMINAL_LINUX_READY: Promise<string>;
 
-	public static getDefaultTerminalLinuxReady(): Promise<string> {
+	public static async getDefaultTerminalLinuxReady(): Promise<string> {
 		if (!LinuxExternalTerminalService._DEFAULT_TERMINAL_LINUX_READY) {
-			LinuxExternalTerminalService._DEFAULT_TERMINAL_LINUX_READY = new Promise<string>(c => {
+			LinuxExternalTerminalService._DEFAULT_TERMINAL_LINUX_READY = new Promise(async r => {
 				if (env.isLinux) {
-					Promise.all([pfs.exists('/etc/debian_version'), process.lazyEnv || Promise.resolve(undefined)]).then(([isDebian]) => {
-						if (isDebian) {
-							c('x-terminal-emulator');
-						} else if (process.env.DESKTOP_SESSION === 'gnome' || process.env.DESKTOP_SESSION === 'gnome-classic') {
-							c('gnome-terminal');
-						} else if (process.env.DESKTOP_SESSION === 'kde-plasma') {
-							c('konsole');
-						} else if (process.env.COLORTERM) {
-							c(process.env.COLORTERM);
-						} else if (process.env.TERM) {
-							c(process.env.TERM);
-						} else {
-							c('xterm');
-						}
-					});
-					return;
+					const isDebian = await pfs.exists('/etc/debian_version');
+					await process.lazyEnv;
+					if (isDebian) {
+						r('x-terminal-emulator');
+					} else if (process.env.DESKTOP_SESSION === 'gnome' || process.env.DESKTOP_SESSION === 'gnome-classic') {
+						r('gnome-terminal');
+					} else if (process.env.DESKTOP_SESSION === 'kde-plasma') {
+						r('konsole');
+					} else if (process.env.COLORTERM) {
+						r(process.env.COLORTERM);
+					} else if (process.env.TERM) {
+						r(process.env.TERM);
+					} else {
+						r('xterm');
+					}
+				} else {
+					r('xterm');
 				}
-
-				c('xterm');
 			});
 		}
 		return LinuxExternalTerminalService._DEFAULT_TERMINAL_LINUX_READY;

@@ -5,10 +5,13 @@
 
 import './menuPreventer';
 import './accessibility/accessibility';
+import './diffEditorHelper';
 import './inspectKeybindings';
 import './largeFileOptimizations';
-import './selectionClipboard';
-import './inspectTMScopes/inspectTMScopes';
+import './inspectEditorTokens/inspectEditorTokens';
+import './quickaccess/gotoLineQuickAccess';
+import './saveParticipants';
+import './toggleColumnSelection';
 import './toggleMinimap';
 import './toggleMultiCursorModifier';
 import './toggleRenderControlCharacter';

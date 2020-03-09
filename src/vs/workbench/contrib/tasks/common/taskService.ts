@@ -9,7 +9,7 @@ import { LinkedMap } from 'vs/base/common/map';
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 import { IDisposable } from 'vs/base/common/lifecycle';
 
-import { IWorkspaceFolder } from 'vs/platform/workspace/common/workspace';
+import { IWorkspaceFolder, IWorkspace } from 'vs/platform/workspace/common/workspace';
 import { Task, ContributedTask, CustomTask, TaskSet, TaskSorter, TaskEvent, TaskIdentifier, ConfiguringTask, TaskRunSource } from 'vs/workbench/contrib/tasks/common/tasks';
 import { ITaskSummary, TaskTerminateResponse, TaskSystemInfo } from 'vs/workbench/contrib/tasks/common/taskSystem';
 import { IStringDictionary } from 'vs/base/common/collections';
@@ -50,18 +50,21 @@ export interface WorkspaceFolderTaskResult extends WorkspaceTaskResult {
 	workspaceFolder: IWorkspaceFolder;
 }
 
+export const USER_TASKS_GROUP_KEY = 'settings';
+
 export interface ITaskService {
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 	onDidStateChange: Event<TaskEvent>;
 	supportsMultipleTaskExecutions: boolean;
 
 	configureAction(): Action;
 	build(): Promise<ITaskSummary>;
 	runTest(): Promise<ITaskSummary>;
-	run(task: Task | undefined, options?: ProblemMatcherRunOptions): Promise<ITaskSummary>;
+	run(task: Task | undefined, options?: ProblemMatcherRunOptions): Promise<ITaskSummary | undefined>;
 	inTerminal(): boolean;
 	isActive(): Promise<boolean>;
 	getActiveTasks(): Promise<Task[]>;
+	getBusyTasks(): Promise<Task[]>;
 	restart(task: Task): void;
 	terminate(task: Task): Promise<TaskTerminateResponse>;
 	terminateAll(): Promise<TaskTerminateResponse[]>;
@@ -70,12 +73,13 @@ export interface ITaskService {
 	/**
 	 * @param alias The task's name, label or defined identifier.
 	 */
-	getTask(workspaceFolder: IWorkspaceFolder | string, alias: string | TaskIdentifier, compareId?: boolean): Promise<Task | undefined>;
+	getTask(workspaceFolder: IWorkspace | IWorkspaceFolder | string, alias: string | TaskIdentifier, compareId?: boolean): Promise<Task | undefined>;
 	getTasksForGroup(group: string): Promise<Task[]>;
 	getRecentlyUsedTasks(): LinkedMap<string, string>;
+	migrateRecentTasks(tasks: Task[]): void;
 	createSorter(): TaskSorter;
 
-	needsFolderQualification(): boolean;
+	getTaskDescription(task: Task): string | undefined;
 	canCustomize(task: ContributedTask | CustomTask): boolean;
 	customize(task: ContributedTask | CustomTask, properties?: {}, openConfig?: boolean): Promise<void>;
 	openConfig(task: CustomTask | undefined): Promise<void>;
@@ -83,6 +87,7 @@ export interface ITaskService {
 	registerTaskProvider(taskProvider: ITaskProvider, type: string): IDisposable;
 
 	registerTaskSystem(scheme: string, taskSystemInfo: TaskSystemInfo): void;
+	setJsonTasksSupported(areSuppored: Promise<boolean>): void;
 
 	extensionCallbackTaskComplete(task: Task, result: number | undefined): Promise<void>;
 }

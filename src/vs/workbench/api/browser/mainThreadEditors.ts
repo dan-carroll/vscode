@@ -15,12 +15,12 @@ import { ISelection } from 'vs/editor/common/core/selection';
 import { IDecorationOptions, IDecorationRenderOptions, ILineChange } from 'vs/editor/common/editorCommon';
 import { ISingleEditOperation } from 'vs/editor/common/model';
 import { CommandsRegistry } from 'vs/platform/commands/common/commands';
-import { IEditorOptions, ITextEditorOptions, IResourceInput } from 'vs/platform/editor/common/editor';
+import { IEditorOptions, ITextEditorOptions, IResourceEditorInput, EditorActivation } from 'vs/platform/editor/common/editor';
 import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
 import { IOpenerService } from 'vs/platform/opener/common/opener';
 import { MainThreadDocumentsAndEditors } from 'vs/workbench/api/browser/mainThreadDocumentsAndEditors';
 import { MainThreadTextEditor } from 'vs/workbench/api/browser/mainThreadEditor';
-import { ExtHostContext, ExtHostEditorsShape, IApplyEditsOptions, IExtHostContext, ITextDocumentShowOptions, ITextEditorConfigurationUpdate, ITextEditorPositionData, IUndoStopOptions, MainThreadTextEditorsShape, TextEditorRevealType, WorkspaceEditDto, reviveWorkspaceEditDto } from 'vs/workbench/api/common/extHost.protocol';
+import { ExtHostContext, ExtHostEditorsShape, IApplyEditsOptions, IExtHostContext, ITextDocumentShowOptions, ITextEditorConfigurationUpdate, ITextEditorPositionData, IUndoStopOptions, MainThreadTextEditorsShape, TextEditorRevealType, IWorkspaceEditDto, reviveWorkspaceEditDto } from 'vs/workbench/api/common/extHost.protocol';
 import { EditorViewColumn, editorGroupToViewColumn, viewColumnToEditorGroup } from 'vs/workbench/api/common/shared/editor';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
@@ -101,10 +101,10 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 	private _getTextEditorPositionData(): ITextEditorPositionData {
 		const result: ITextEditorPositionData = Object.create(null);
-		for (let workbenchEditor of this._editorService.visibleControls) {
-			const id = this._documentsAndEditors.findTextEditorIdFor(workbenchEditor);
+		for (let editorPane of this._editorService.visibleEditorPanes) {
+			const id = this._documentsAndEditors.findTextEditorIdFor(editorPane);
 			if (id) {
-				result[id] = editorGroupToViewColumn(this._editorGroupService, workbenchEditor.group);
+				result[id] = editorGroupToViewColumn(this._editorGroupService, editorPane.group);
 			}
 		}
 		return result;
@@ -118,10 +118,13 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		const editorOptions: ITextEditorOptions = {
 			preserveFocus: options.preserveFocus,
 			pinned: options.pinned,
-			selection: options.selection
+			selection: options.selection,
+			// preserve pre 1.38 behaviour to not make group active when preserveFocus: true
+			// but make sure to restore the editor to fix https://github.com/microsoft/vscode/issues/79633
+			activation: options.preserveFocus ? EditorActivation.RESTORE : undefined
 		};
 
-		const input: IResourceInput = {
+		const input: IResourceEditorInput = {
 			resource: uri,
 			options: editorOptions
 		};
@@ -148,10 +151,10 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 	async $tryHideEditor(id: string): Promise<void> {
 		const mainThreadEditor = this._documentsAndEditors.getEditor(id);
 		if (mainThreadEditor) {
-			const editors = this._editorService.visibleControls;
-			for (let editor of editors) {
-				if (mainThreadEditor.matches(editor)) {
-					return editor.group.closeEditor(editor.input);
+			const editorPanes = this._editorService.visibleEditorPanes;
+			for (let editorPane of editorPanes) {
+				if (mainThreadEditor.matches(editorPane)) {
+					return editorPane.group.closeEditor(editorPane.input);
 				}
 			}
 		}
@@ -212,9 +215,9 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		return Promise.resolve(editor.applyEdits(modelVersionId, edits, opts));
 	}
 
-	$tryApplyWorkspaceEdit(dto: WorkspaceEditDto): Promise<boolean> {
-		const { edits } = reviveWorkspaceEditDto(dto);
-		return this._bulkEditService.apply({ edits }, undefined).then(() => true, err => false);
+	$tryApplyWorkspaceEdit(dto: IWorkspaceEditDto): Promise<boolean> {
+		const { edits } = reviveWorkspaceEditDto(dto)!;
+		return this._bulkEditService.apply({ edits }).then(() => true, _err => false);
 	}
 
 	$tryInsertSnippet(id: string, template: string, ranges: readonly IRange[], opts: IUndoStopOptions): Promise<boolean> {

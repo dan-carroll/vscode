@@ -228,8 +228,6 @@ class MonarchLineState implements modes.IState {
 	}
 }
 
-const hasOwnProperty = Object.hasOwnProperty;
-
 interface IMonarchTokensCollector {
 	enterMode(startOffset: number, modeId: string): void;
 	emit(startOffset: number, type: string): void;
@@ -465,7 +463,7 @@ export class MonarchTokenizer implements modes.ITokenizationSupport {
 	}
 
 	public tokenize2(line: string, lineState: modes.IState, offsetDelta: number): TokenizationResult2 {
-		let tokensCollector = new MonarchModernTokensCollector(this._modeService, this._standaloneThemeService.getTheme().tokenTheme);
+		let tokensCollector = new MonarchModernTokensCollector(this._modeService, this._standaloneThemeService.getColorTheme().tokenTheme);
 		let endLineState = this._tokenize(line, <MonarchLineState>lineState, offsetDelta, tokensCollector);
 		return tokensCollector.finalize(endLineState);
 	}
@@ -490,11 +488,7 @@ export class MonarchTokenizer implements modes.ITokenizationSupport {
 		let popOffset = -1;
 		let hasEmbeddedPopRule = false;
 
-		for (let idx in rules) {
-			if (!hasOwnProperty.call(rules, idx)) {
-				continue;
-			}
-			let rule: monarchCommon.IRule = rules[idx];
+		for (const rule of rules) {
 			if (!monarchCommon.isIAction(rule.action) || rule.action.nextEmbedded !== '@pop') {
 				continue;
 			}
@@ -507,7 +501,7 @@ export class MonarchTokenizer implements modes.ITokenizationSupport {
 			}
 
 			let result = line.search(regex);
-			if (result === -1) {
+			if (result === -1 || (result !== 0 && rule.matchOnlyAtLineStart)) {
 				continue;
 			}
 
@@ -619,16 +613,13 @@ export class MonarchTokenizer implements modes.ITokenizationSupport {
 
 				// try each rule until we match
 				let restOfLine = line.substr(pos);
-				for (let idx in rules) {
-					if (hasOwnProperty.call(rules, idx)) {
-						let rule: monarchCommon.IRule = rules[idx];
-						if (pos === 0 || !rule.matchOnlyAtLineStart) {
-							matches = restOfLine.match(rule.regex);
-							if (matches) {
-								matched = matches[0];
-								action = rule.action;
-								break;
-							}
+				for (const rule of rules) {
+					if (pos === 0 || !rule.matchOnlyAtLineStart) {
+						matches = restOfLine.match(rule.regex);
+						if (matches) {
+							matched = matches[0];
+							action = rule.action;
+							break;
 						}
 					}
 				}

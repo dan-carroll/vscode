@@ -11,10 +11,36 @@ import { IDecorationsProvider, IDecorationData } from 'vs/workbench/services/dec
 import { listInvalidItemForeground } from 'vs/platform/theme/common/colorRegistry';
 import { DisposableStore } from 'vs/base/common/lifecycle';
 import { IExplorerService } from 'vs/workbench/contrib/files/common/files';
+import { explorerRootErrorEmitter } from 'vs/workbench/contrib/files/browser/views/explorerViewer';
+import { ExplorerItem } from 'vs/workbench/contrib/files/common/explorerModel';
+
+export function provideDecorations(fileStat: ExplorerItem): IDecorationData | undefined {
+	if (fileStat.isRoot && fileStat.isError) {
+		return {
+			tooltip: localize('canNotResolve', "Unable to resolve workspace folder"),
+			letter: '!',
+			color: listInvalidItemForeground,
+		};
+	}
+	if (fileStat.isSymbolicLink) {
+		return {
+			tooltip: localize('symbolicLlink', "Symbolic Link"),
+			letter: '\u2937'
+		};
+	}
+	if (fileStat.isUnknown) {
+		return {
+			tooltip: localize('unknown', "Unknown File Type"),
+			letter: '?'
+		};
+	}
+
+	return undefined;
+}
 
 export class ExplorerDecorationsProvider implements IDecorationsProvider {
 	readonly label: string = localize('label', "Explorer");
-	private _onDidChange = new Emitter<URI[]>();
+	private readonly _onDidChange = new Emitter<URI[]>();
 	private readonly toDispose = new DisposableStore();
 
 	constructor(
@@ -30,6 +56,9 @@ export class ExplorerDecorationsProvider implements IDecorationsProvider {
 				this._onDidChange.fire([change.item.resource]);
 			}
 		}));
+		this.toDispose.add(explorerRootErrorEmitter.event((resource => {
+			this._onDidChange.fire([resource]);
+		})));
 	}
 
 	get onDidChange(): Event<URI[]> {
@@ -38,21 +67,11 @@ export class ExplorerDecorationsProvider implements IDecorationsProvider {
 
 	provideDecorations(resource: URI): IDecorationData | undefined {
 		const fileStat = this.explorerService.findClosest(resource);
-		if (fileStat && fileStat.isRoot && fileStat.isError) {
-			return {
-				tooltip: localize('canNotResolve', "Can not resolve workspace folder"),
-				letter: '!',
-				color: listInvalidItemForeground,
-			};
-		}
-		if (fileStat && fileStat.isSymbolicLink) {
-			return {
-				tooltip: localize('symbolicLlink', "Symbolic Link"),
-				letter: '\u2937'
-			};
+		if (!fileStat) {
+			return undefined;
 		}
 
-		return undefined;
+		return provideDecorations(fileStat);
 	}
 
 	dispose(): void {

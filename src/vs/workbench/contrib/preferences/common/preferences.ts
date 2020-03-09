@@ -6,7 +6,7 @@
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 import { RawContextKey } from 'vs/platform/contextkey/common/contextkey';
 import { ISettingsEditorModel, ISearchResult } from 'vs/workbench/services/preferences/common/preferences';
-import { IEditor } from 'vs/workbench/common/editor';
+import { IEditorPane } from 'vs/workbench/common/editor';
 import { IKeybindingItemEntry } from 'vs/workbench/services/preferences/common/keybindingsEditorModel';
 import { CancellationToken } from 'vs/base/common/cancellation';
 import { Event } from 'vs/base/common/event';
@@ -33,7 +33,7 @@ export interface IEndpointDetails {
 export const IPreferencesSearchService = createDecorator<IPreferencesSearchService>('preferencesSearchService');
 
 export interface IPreferencesSearchService {
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 
 	getLocalSearchProvider(filter: string): ISearchProvider;
 	getRemoteSearchProvider(filter: string, newExtensionsOnly?: boolean): ISearchProvider | undefined;
@@ -43,7 +43,7 @@ export interface ISearchProvider {
 	searchModel(preferencesModel: ISettingsEditorModel, token?: CancellationToken): Promise<ISearchResult | null>;
 }
 
-export interface IKeybindingsEditor extends IEditor {
+export interface IKeybindingsEditorPane extends IEditorPane {
 
 	readonly activeKeybindingEntry: IKeybindingItemEntry | null;
 	readonly onDefineWhenExpression: Event<IKeybindingItemEntry>;
@@ -55,7 +55,6 @@ export interface IKeybindingsEditor extends IEditor {
 	focusKeybindings(): void;
 	recordSearchKeys(): void;
 	toggleSortByPrecedence(): void;
-	layoutColumns(columns: HTMLElement[]): void;
 	selectKeybinding(keybindingEntry: IKeybindingItemEntry): void;
 	defineKeybinding(keybindingEntry: IKeybindingItemEntry): Promise<void>;
 	defineWhenExpression(keybindingEntry: IKeybindingItemEntry): void;

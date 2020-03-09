@@ -5,8 +5,11 @@
 
 import { URI } from 'vs/base/common/uri';
 import { CharCode } from 'vs/base/common/charCode';
-import { Iterator, IteratorResult, FIN } from './iterator';
+import { FIN } from './iterator';
 
+/**
+ * @deprecated ES6: use `[...SetOrMap.values()]`
+ */
 export function values<V = any>(set: Set<V>): V[];
 export function values<K = any, V = any>(map: Map<K, V>): V[];
 export function values<V>(forEachable: { forEach(callback: (value: V, ...more: any[]) => any): void }): V[] {
@@ -15,9 +18,12 @@ export function values<V>(forEachable: { forEach(callback: (value: V, ...more: a
 	return result;
 }
 
+/**
+ * @deprecated ES6: use `[...map.keys()]`
+ */
 export function keys<K, V>(map: Map<K, V>): K[] {
 	const result: K[] = [];
-	map.forEach((value, key) => result.push(key));
+	map.forEach((_value, key) => result.push(key));
 
 	return result;
 }
@@ -50,6 +56,9 @@ export function setToString<K>(set: Set<K>): string {
 	return `Set(${set.size}) {${entries.join(', ')}}`;
 }
 
+/**
+ * @deprecated ES6: use `...Map.entries()`
+ */
 export function mapToSerializable(map: Map<string, string>): [string, string][] {
 	const serializable: [string, string][] = [];
 
@@ -60,6 +69,9 @@ export function mapToSerializable(map: Map<string, string>): [string, string][] 
 	return serializable;
 }
 
+/**
+ * @deprecated ES6: use `new Map([[key1, value1],[key2, value2]])`
+ */
 export function serializableToMap(serializable: [string, string][]): Map<string, string> {
 	const items = new Map<string, string>();
 
@@ -112,9 +124,11 @@ export class StringIterator implements IKeyIterator {
 
 export class PathIterator implements IKeyIterator {
 
-	private _value: string;
-	private _from: number;
-	private _to: number;
+	private _value!: string;
+	private _from!: number;
+	private _to!: number;
+
+	constructor(private _splitOnBackslash: boolean = true) { }
 
 	reset(key: string): this {
 		this._value = key.replace(/\\$|\/$/, '');
@@ -133,7 +147,7 @@ export class PathIterator implements IKeyIterator {
 		let justSeps = true;
 		for (; this._to < this._value.length; this._to++) {
 			const ch = this._value.charCodeAt(this._to);
-			if (ch === CharCode.Slash || ch === CharCode.Backslash) {
+			if (ch === CharCode.Slash || this._splitOnBackslash && ch === CharCode.Backslash) {
 				if (justSeps) {
 					this._from++;
 				} else {
@@ -176,9 +190,9 @@ export class PathIterator implements IKeyIterator {
 }
 
 class TernarySearchTreeNode<E> {
-	segment: string;
+	segment!: string;
 	value: E | undefined;
-	key: string;
+	key!: string;
 	left: TernarySearchTreeNode<E> | undefined;
 	mid: TernarySearchTreeNode<E> | undefined;
 	right: TernarySearchTreeNode<E> | undefined;
@@ -451,8 +465,8 @@ export class ResourceMap<T> {
 		return this.map.delete(this.toKey(resource));
 	}
 
-	forEach(clb: (value: T) => void): void {
-		this.map.forEach(clb);
+	forEach(clb: (value: T, key: URI) => void): void {
+		this.map.forEach((value, index) => clb(value, URI.parse(index)));
 	}
 
 	values(): T[] {
@@ -480,8 +494,6 @@ export class ResourceMap<T> {
 		return resourceMap;
 	}
 }
-
-// We should fold BoundedMap and LinkedMap. See https://github.com/Microsoft/vscode/issues/28496
 
 interface Item<K, V> {
 	previous: Item<K, V> | undefined;
@@ -523,6 +535,14 @@ export class LinkedMap<K, V> {
 
 	get size(): number {
 		return this._size;
+	}
+
+	get first(): V | undefined {
+		return this._head?.value;
+	}
+
+	get last(): V | undefined {
+		return this._tail?.value;
 	}
 
 	has(key: K): boolean {

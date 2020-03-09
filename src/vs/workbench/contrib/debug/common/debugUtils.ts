@@ -4,33 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { equalsIgnoreCase } from 'vs/base/common/strings';
-import { IConfig, IDebuggerContribution, IDebugService } from 'vs/workbench/contrib/debug/common/debug';
+import { IDebuggerContribution, IDebugSession, IConfigPresentation } from 'vs/workbench/contrib/debug/common/debug';
 import { URI as uri } from 'vs/base/common/uri';
 import { isAbsolute } from 'vs/base/common/path';
 import { deepClone } from 'vs/base/common/objects';
-import { IHistoryService } from 'vs/workbench/services/history/common/history';
-import { first } from 'vs/base/common/arrays';
 
 const _formatPIIRegexp = /{([^}]+)}/g;
 
-export function startDebugging(debugService: IDebugService, historyService: IHistoryService, noDebug: boolean, ): Promise<boolean> {
-	const configurationManager = debugService.getConfigurationManager();
-	let launch = configurationManager.selectedConfiguration.launch;
-	if (!launch || launch.getConfigurationNames().length === 0) {
-		const rootUri = historyService.getLastActiveWorkspaceRoot();
-		launch = configurationManager.getLaunch(rootUri);
-		if (!launch || launch.getConfigurationNames().length === 0) {
-			const launches = configurationManager.getLaunches();
-			launch = first(launches, l => !!(l && l.getConfigurationNames().length), launch);
-		}
-
-		configurationManager.selectConfiguration(launch);
-	}
-
-	return debugService.startDebugging(launch, undefined, noDebug);
-}
-
-export function formatPII(value: string, excludePII: boolean, args: { [key: string]: string }): string {
+export function formatPII(value: string, excludePII: boolean, args: { [key: string]: string } | undefined): string {
 	return value.replace(_formatPIIRegexp, function (match, group) {
 		if (excludePII && group.length > 0 && group[0] !== '_') {
 			return match;
@@ -42,8 +23,29 @@ export function formatPII(value: string, excludePII: boolean, args: { [key: stri
 	});
 }
 
-export function isExtensionHostDebugging(config: IConfig) {
-	return config.type && equalsIgnoreCase(config.type === 'vslsShare' ? (<any>config).adapterProxy.configuration.type : config.type, 'extensionhost');
+export function isSessionAttach(session: IDebugSession): boolean {
+	return !session.parentSession && session.configuration.request === 'attach' && !getExtensionHostDebugSession(session);
+}
+
+/**
+ * Returns the session or any parent which is an extension host debug session.
+ * Returns undefined if there's none.
+ */
+export function getExtensionHostDebugSession(session: IDebugSession): IDebugSession | void {
+	let type = session.configuration.type;
+	if (!type) {
+		return;
+	}
+
+	if (type === 'vslsShare') {
+		type = (<any>session.configuration).adapterProxy.configuration.type;
+	}
+
+	if (equalsIgnoreCase(type, 'extensionhost') || equalsIgnoreCase(type, 'pwa-extensionhost')) {
+		return session;
+	}
+
+	return session.parentSession ? getExtensionHostDebugSession(session.parentSession) : undefined;
 }
 
 // only a debugger contributions with a label, program, or runtime attribute is considered a "defining" or "main" debugger contribution
@@ -103,38 +105,43 @@ export function isUri(s: string | undefined): boolean {
 	return !!(s && s.match(_schemePattern));
 }
 
-function stringToUri(path: string): string {
-	if (typeof path === 'string') {
-		if (isUri(path)) {
-			return <string><unknown>uri.parse(path);
+function stringToUri(source: PathContainer): string | undefined {
+	if (typeof source.path === 'string') {
+		if (typeof source.sourceReference === 'number' && source.sourceReference > 0) {
+			// if there is a source reference, don't touch path
 		} else {
-			// assume path
-			if (isAbsolute(path)) {
-				return <string><unknown>uri.file(path);
+			if (isUri(source.path)) {
+				return <string><unknown>uri.parse(source.path);
 			} else {
-				// leave relative path as is
+				// assume path
+				if (isAbsolute(source.path)) {
+					return <string><unknown>uri.file(source.path);
+				} else {
+					// leave relative path as is
+				}
 			}
 		}
 	}
-	return path;
+	return source.path;
 }
 
-function uriToString(path: string): string {
-	if (typeof path === 'object') {
-		const u = uri.revive(path);
+function uriToString(source: PathContainer): string | undefined {
+	if (typeof source.path === 'object') {
+		const u = uri.revive(source.path);
 		if (u.scheme === 'file') {
 			return u.fsPath;
 		} else {
 			return u.toString();
 		}
 	}
-	return path;
+	return source.path;
 }
 
 // path hooks helpers
 
 interface PathContainer {
 	path?: string;
+	sourceReference?: number;
 }
 
 export function convertToDAPaths(message: DebugProtocol.ProtocolMessage, toUri: boolean): DebugProtocol.ProtocolMessage {
@@ -146,7 +153,7 @@ export function convertToDAPaths(message: DebugProtocol.ProtocolMessage, toUri: 
 
 	convertPaths(msg, (toDA: boolean, source: PathContainer | undefined) => {
 		if (toDA && source) {
-			source.path = source.path ? fixPath(source.path) : undefined;
+			source.path = fixPath(source);
 		}
 	});
 	return msg;
@@ -161,7 +168,7 @@ export function convertToVSCPaths(message: DebugProtocol.ProtocolMessage, toUri:
 
 	convertPaths(msg, (toDA: boolean, source: PathContainer | undefined) => {
 		if (!toDA && source) {
-			source.path = source.path ? fixPath(source.path) : undefined;
+			source.path = fixPath(source);
 		}
 	});
 	return msg;
@@ -191,6 +198,9 @@ function convertPaths(msg: DebugProtocol.ProtocolMessage, fixSourcePath: (toDA: 
 			switch (request.command) {
 				case 'setBreakpoints':
 					fixSourcePath(true, (<DebugProtocol.SetBreakpointsArguments>request.arguments).source);
+					break;
+				case 'breakpointLocations':
+					fixSourcePath(true, (<DebugProtocol.BreakpointLocationsArguments>request.arguments).source);
 					break;
 				case 'source':
 					fixSourcePath(true, (<DebugProtocol.SourceArguments>request.arguments).source);
@@ -230,4 +240,40 @@ function convertPaths(msg: DebugProtocol.ProtocolMessage, fixSourcePath: (toDA: 
 			}
 			break;
 	}
+}
+
+export function getVisibleAndSorted<T extends { presentation?: IConfigPresentation }>(array: T[]): T[] {
+	return array.filter(config => !config.presentation?.hidden).sort((first, second) => {
+		if (!first.presentation) {
+			return 1;
+		}
+		if (!second.presentation) {
+			return -1;
+		}
+		if (!first.presentation.group) {
+			if (!second.presentation.group) {
+				return compareOrders(first.presentation.order, second.presentation.order);
+			}
+			return 1;
+		}
+		if (!second.presentation.group) {
+			return -1;
+		}
+		if (first.presentation.group !== second.presentation.group) {
+			return first.presentation.group.localeCompare(second.presentation.group);
+		}
+
+		return compareOrders(first.presentation.order, second.presentation.order);
+	});
+}
+
+function compareOrders(first: number | undefined, second: number | undefined): number {
+	if (typeof first !== 'number') {
+		return 1;
+	}
+	if (typeof second !== 'number') {
+		return -1;
+	}
+
+	return first - second;
 }

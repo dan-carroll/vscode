@@ -14,7 +14,7 @@ import { ConfigurationScope, IConfigurationExtensionInfo } from 'vs/platform/con
 import { IEditorOptions } from 'vs/platform/editor/common/editor';
 import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 import { IWorkspaceContextService } from 'vs/platform/workspace/common/workspace';
-import { EditorOptions, IEditor } from 'vs/workbench/common/editor';
+import { EditorOptions, IEditorPane } from 'vs/workbench/common/editor';
 import { IEditorGroup } from 'vs/workbench/services/editor/common/editorGroupsService';
 import { Settings2EditorModel } from 'vs/workbench/services/preferences/common/preferencesModels';
 
@@ -67,6 +67,7 @@ export interface ISetting {
 	enumDescriptions?: string[];
 	enumDescriptionsAreMarkdown?: boolean;
 	tags?: string[];
+	disallowSyncIgnore?: boolean;
 	extensionInfo?: IConfigurationExtensionInfo;
 	validator?: (value: any) => string | null;
 }
@@ -154,6 +155,7 @@ export interface ISettingsEditorOptions extends IEditorOptions {
 	target?: ConfigurationTarget;
 	folderUri?: URI;
 	query?: string;
+	editSetting?: string;
 }
 
 /**
@@ -164,22 +166,16 @@ export class SettingsEditorOptions extends EditorOptions implements ISettingsEdi
 	target?: ConfigurationTarget;
 	folderUri?: URI;
 	query?: string;
+	editSetting?: string;
 
 	static create(settings: ISettingsEditorOptions): SettingsEditorOptions {
 		const options = new SettingsEditorOptions();
+		options.overwrite(settings);
 
 		options.target = settings.target;
 		options.folderUri = settings.folderUri;
 		options.query = settings.query;
-
-		// IEditorOptions
-		options.preserveFocus = settings.preserveFocus;
-		options.forceReload = settings.forceReload;
-		options.revealIfVisible = settings.revealIfVisible;
-		options.revealIfOpened = settings.revealIfOpened;
-		options.pinned = settings.pinned;
-		options.index = settings.index;
-		options.inactive = settings.inactive;
+		options.editSetting = settings.editSetting;
 
 		return options;
 	}
@@ -191,7 +187,7 @@ export interface IKeybindingsEditorModel<T> extends IPreferencesEditorModel<T> {
 export const IPreferencesService = createDecorator<IPreferencesService>('preferencesService');
 
 export interface IPreferencesService {
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 
 	userSettingsResource: URI;
 	workspaceSettingsResource: URI | null;
@@ -201,17 +197,15 @@ export interface IPreferencesService {
 	createPreferencesEditorModel<T>(uri: URI): Promise<IPreferencesEditorModel<T> | null>;
 	createSettings2EditorModel(): Settings2EditorModel; // TODO
 
-	openRawDefaultSettings(): Promise<IEditor | null>;
-	openSettings(jsonEditor: boolean | undefined, query: string | undefined): Promise<IEditor | null>;
-	openGlobalSettings(jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditor | null>;
-	openRemoteSettings(): Promise<IEditor | null>;
-	openWorkspaceSettings(jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditor | null>;
-	openFolderSettings(folder: URI, jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditor | null>;
+	openRawDefaultSettings(): Promise<IEditorPane | undefined>;
+	openSettings(jsonEditor: boolean | undefined, query: string | undefined): Promise<IEditorPane | undefined>;
+	openGlobalSettings(jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditorPane | undefined>;
+	openRemoteSettings(): Promise<IEditorPane | undefined>;
+	openWorkspaceSettings(jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditorPane | undefined>;
+	openFolderSettings(folder: URI, jsonEditor?: boolean, options?: ISettingsEditorOptions, group?: IEditorGroup): Promise<IEditorPane | undefined>;
 	switchSettings(target: ConfigurationTarget, resource: URI, jsonEditor?: boolean): Promise<void>;
 	openGlobalKeybindingSettings(textual: boolean): Promise<void>;
-	openDefaultKeybindingsFile(): Promise<IEditor | null>;
-
-	configureSettingsForLanguage(language: string | null): void;
+	openDefaultKeybindingsFile(): Promise<IEditorPane | undefined>;
 }
 
 export function getSettingsTargetName(target: ConfigurationTarget, resource: URI, workspaceContextService: IWorkspaceContextService): string {

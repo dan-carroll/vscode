@@ -8,7 +8,7 @@ import { NullTelemetryService, combinedAppender, LogAppender } from 'vs/platform
 import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
 import { Disposable } from 'vs/base/common/lifecycle';
 import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService';
-import { IProductService } from 'vs/platform/product/common/product';
+import { IProductService } from 'vs/platform/product/common/productService';
 import { ISharedProcessService } from 'vs/platform/ipc/electron-browser/sharedProcessService';
 import { TelemetryAppenderClient } from 'vs/platform/telemetry/node/telemetryIpc';
 import { ILogService } from 'vs/platform/log/common/log';
@@ -17,15 +17,16 @@ import { resolveWorkbenchCommonProperties } from 'vs/platform/telemetry/node/wor
 import { TelemetryService as BaseTelemetryService, ITelemetryServiceConfig } from 'vs/platform/telemetry/common/telemetryService';
 import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
 import { ClassifiedEvent, StrictPropertyCheck, GDPRClassification } from 'vs/platform/telemetry/common/gdprTypings';
+import { INativeWorkbenchEnvironmentService } from 'vs/workbench/services/environment/electron-browser/environmentService';
 
 export class TelemetryService extends Disposable implements ITelemetryService {
 
-	_serviceBrand: any;
+	_serviceBrand: undefined;
 
 	private impl: ITelemetryService;
 
 	constructor(
-		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
+		@IWorkbenchEnvironmentService environmentService: INativeWorkbenchEnvironmentService,
 		@IProductService productService: IProductService,
 		@ISharedProcessService sharedProcessService: ISharedProcessService,
 		@ILogService logService: ILogService,
@@ -38,7 +39,7 @@ export class TelemetryService extends Disposable implements ITelemetryService {
 			const channel = sharedProcessService.getChannel('telemetryAppender');
 			const config: ITelemetryServiceConfig = {
 				appender: combinedAppender(new TelemetryAppenderClient(channel), new LogAppender(logService)),
-				commonProperties: resolveWorkbenchCommonProperties(storageService, productService.commit, productService.version, environmentService.configuration.machineId, environmentService.installSourcePath, environmentService.configuration.remoteAuthority),
+				commonProperties: resolveWorkbenchCommonProperties(storageService, productService.commit, productService.version, environmentService.configuration.machineId, productService.msftInternalDomains, environmentService.installSourcePath, environmentService.configuration.remoteAuthority),
 				piiPaths: environmentService.extensionsPath ? [environmentService.appRoot, environmentService.extensionsPath] : [environmentService.appRoot]
 			};
 

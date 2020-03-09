@@ -16,13 +16,14 @@ import { EditorContextKeys } from 'vs/editor/common/editorContextKeys';
 import { MenuId } from 'vs/platform/actions/common/actions';
 import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
 import { KeybindingWeight } from 'vs/platform/keybinding/common/keybindingsRegistry';
+import { EditorOption } from 'vs/editor/common/config/editorOptions';
 
 const CLIPBOARD_CONTEXT_MENU_GROUP = '9_cutcopypaste';
 
 const supportsCut = (platform.isNative || document.queryCommandSupported('cut'));
 const supportsCopy = (platform.isNative || document.queryCommandSupported('copy'));
 // IE and Edge have trouble with setting html content in clipboard
-const supportsCopyWithSyntaxHighlighting = (supportsCopy && !browser.isEdgeOrIE);
+const supportsCopyWithSyntaxHighlighting = (supportsCopy && !browser.isEdge);
 // Chrome incorrectly returns true for document.queryCommandSupported('paste')
 // when the paste feature is available but the calling script has insufficient
 // privileges to actually perform the action
@@ -76,11 +77,11 @@ class ExecCommandCutAction extends ExecCommandAction {
 			alias: 'Cut',
 			precondition: EditorContextKeys.writable,
 			kbOpts: kbOpts,
-			menuOpts: {
+			contextMenuOpts: {
 				group: CLIPBOARD_CONTEXT_MENU_GROUP,
 				order: 1
 			},
-			menubarOpts: {
+			menuOpts: {
 				menuId: MenuId.MenubarEditMenu,
 				group: '2_ccp',
 				title: nls.localize({ key: 'miCut', comment: ['&& denotes a mnemonic'] }, "Cu&&t"),
@@ -94,7 +95,7 @@ class ExecCommandCutAction extends ExecCommandAction {
 			return;
 		}
 
-		const emptySelectionClipboard = editor.getConfiguration().emptySelectionClipboard;
+		const emptySelectionClipboard = editor.getOption(EditorOption.emptySelectionClipboard);
 
 		if (!emptySelectionClipboard && editor.getSelection().isEmpty()) {
 			return;
@@ -125,11 +126,11 @@ class ExecCommandCopyAction extends ExecCommandAction {
 			alias: 'Copy',
 			precondition: undefined,
 			kbOpts: kbOpts,
-			menuOpts: {
+			contextMenuOpts: {
 				group: CLIPBOARD_CONTEXT_MENU_GROUP,
 				order: 2
 			},
-			menubarOpts: {
+			menuOpts: {
 				menuId: MenuId.MenubarEditMenu,
 				group: '2_ccp',
 				title: nls.localize({ key: 'miCopy', comment: ['&& denotes a mnemonic'] }, "&&Copy"),
@@ -143,7 +144,7 @@ class ExecCommandCopyAction extends ExecCommandAction {
 			return;
 		}
 
-		const emptySelectionClipboard = editor.getConfiguration().emptySelectionClipboard;
+		const emptySelectionClipboard = editor.getOption(EditorOption.emptySelectionClipboard);
 
 		if (!emptySelectionClipboard && editor.getSelection().isEmpty()) {
 			return;
@@ -160,6 +161,7 @@ class ExecCommandPasteAction extends ExecCommandAction {
 			kbExpr: EditorContextKeys.textInputFocus,
 			primary: KeyMod.CtrlCmd | KeyCode.KEY_V,
 			win: { primary: KeyMod.CtrlCmd | KeyCode.KEY_V, secondary: [KeyMod.Shift | KeyCode.Insert] },
+			linux: { primary: KeyMod.CtrlCmd | KeyCode.KEY_V, secondary: [KeyMod.Shift | KeyCode.Insert] },
 			weight: KeybindingWeight.EditorContrib
 		};
 		// Do not bind paste keybindings in the browser,
@@ -174,11 +176,11 @@ class ExecCommandPasteAction extends ExecCommandAction {
 			alias: 'Paste',
 			precondition: EditorContextKeys.writable,
 			kbOpts: kbOpts,
-			menuOpts: {
+			contextMenuOpts: {
 				group: CLIPBOARD_CONTEXT_MENU_GROUP,
 				order: 3
 			},
-			menubarOpts: {
+			menuOpts: {
 				menuId: MenuId.MenubarEditMenu,
 				group: '2_ccp',
 				title: nls.localize({ key: 'miPaste', comment: ['&& denotes a mnemonic'] }, "&&Paste"),
@@ -209,7 +211,7 @@ class ExecCommandCopyWithSyntaxHighlightingAction extends ExecCommandAction {
 			return;
 		}
 
-		const emptySelectionClipboard = editor.getConfiguration().emptySelectionClipboard;
+		const emptySelectionClipboard = editor.getOption(EditorOption.emptySelectionClipboard);
 
 		if (!emptySelectionClipboard && editor.getSelection().isEmpty()) {
 			return;
